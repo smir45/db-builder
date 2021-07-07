@@ -1,0 +1,18 @@
+{
+    "name": "ryzen/db-builder",
+    "description": "Powerful, Optimized Query Builder For Your PHP projects",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "Ryzen\\DbBuilder\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Raju Choudhary",
+            "email": "razoo.choudhary@gmail.com"
+        }
+    ],
+    "require": {}
+}
