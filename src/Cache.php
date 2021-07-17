@@ -6,9 +6,19 @@ namespace Ryzen\DbBuilder;
 
 class Cache
 {
+    /**
+     * @var mixed|null
+     */
+
     protected $cacheDir = null;
     protected $cache = null;
     protected $finish = null;
+
+    /**
+     * Cache constructor.
+     * @param null $dir
+     * @param int $time
+     */
 
     function __construct($dir = null, $time = 0)
     {
@@ -20,6 +30,12 @@ class Cache
         $this->cache = $time;
         $this->finish = time() + $time;
     }
+
+    /**
+     * @param $sql
+     * @param false $array
+     * @return false|mixed|void
+     */
 
     public function getCache($sql, $array = false)
     {
@@ -42,6 +58,12 @@ class Cache
         return false;
     }
 
+    /**
+     * @param $sql
+     * @param $result
+     * @return false|void
+     */
+
     public function setCache($sql, $result)
     {
         if (is_null($this->cache)) {
@@ -57,6 +79,12 @@ class Cache
 
         return;
     }
+
+    /**
+     * @param $name
+     * @return string
+     */
+
     protected function fileName($name)
     {
         return md5($name);

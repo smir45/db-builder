@@ -9,8 +9,13 @@ use PDOException;
 class DbBuilder implements DbInterface
 {
 
+    /**
+     * @var PDO|null
+     */
+
     public $pdo = null;
 
+    protected $conf     = null;
     protected $select   = '*';
     protected $from     = null;
     protected $where    = null;
@@ -36,38 +41,60 @@ class DbBuilder implements DbInterface
     protected $cache = null;
     protected $cacheDir = null;
 
+    /**
+     * DbBuilder constructor.
+     * @param array $config
+     */
+
     public function __construct(array $config){
 
-        $config['mysql_database_config']['db_driver']       = $config['mysql_database_config']['db_driver'] ?? 'mysql';
-        $config['mysql_database_config']['db_host']         = $config['mysql_database_config']['db_host'] ?? 'localhost';
-        $config['mysql_database_config']['db_charset']      = $config['mysql_database_config']['db_charset'] ?? 'utf8mb4';
-        $config['mysql_database_config']['db_collation']    = $config['mysql_database_config']['db_collation'] ?? 'utf8mb4_general_ci';
-        $config['mysql_database_config']['db_port']         = $config['mysql_database_config']['db_port'] ?? (strstr($config['mysql_database_config']['db_host'], ':') ? explode(':', $config['mysql_database_config']['db_host'])[1] : '');
-        $this->prefix           = $config['mysql_database_config']['db_prefix'] ?? '';
-        $this->debug            = $config['debug'] ?? true;
-        $this->cacheDir         = $config['cachedir'] ?? __DIR__ . '/cache/';
+        $this->conf = $config['mysql_database_config'];
+
+        $this->conf['db_driver']       = $this->conf['db_driver']       ?? 'mysql';
+        $this->conf['db_host']         = $this->conf['db_host']         ?? 'localhost';
+        $this->conf['db_charset']      = $this->conf['db_charset']      ?? 'utf8mb4';
+        $this->conf['db_collation']    = $this->conf['db_collation']    ?? 'utf8mb4_general_ci';
+        $this->conf['db_port']         = $this->conf['db_port']         ?? (strstr($this->conf['db_host'], ':') ? explode(':', $this->conf['db_host'])[1] : '');
+        $this->prefix                  = $this->conf['db_prefix']       ?? '';
+        $this->debug                   = $config['debug']               ?? true;
+        $this->cacheDir                = $config['cachedir']            ?? __DIR__ . '/cache/';
 
         $dsn = '';
-        if (in_array($config['mysql_database_config']['db_driver'], ['', 'mysql', 'pgsql'])) {
-            $dsn = $config['mysql_database_config']['db_driver'] . ':host=' . str_replace(':' . $config['mysql_database_config']['db_port'], '', $config['mysql_database_config']['db_host']) . ';'
-                . ($config['mysql_database_config']['db_port'] !== '' ? 'port=' . $config['mysql_database_config']['db_port'] . ';' : '')
-                . 'dbname=' . $config['mysql_database_config']['db_name'];
-        } elseif ($config['mysql_database_config']['db_driver'] === 'sqlite') {
-            $dsn = 'sqlite:' . $config['mysql_database_config']['db_name'];
-        } elseif ($config['mysql_database_config']['driver'] === 'oracle') {
-            $dsn = 'oci:dbname=' . $config['mysql_database_config']['db_host'] . '/' . $config['mysql_database_config']['db_name'];
+
+        if (in_array($this->conf['db_driver'], ['', 'mysql', 'pgsql'])) {
+
+            $dsn = $this->conf['db_driver'] .
+                ':host=' . str_replace(':' . $this->conf['db_port'], '', $this->conf['db_host']) . ';' . ($this->conf['db_port'] !== '' ?
+                    'port=' . $this->conf['db_port'] . ';' : '') .
+                        'dbname=' . $this->conf['db_name'];
+
+        } elseif ($this->conf['db_driver'] === 'sqlite') {
+
+            $dsn = 'sqlite:' . $this->conf['db_name'];
+
+        } elseif ($this->conf['driver'] === 'oracle') {
+
+            $dsn = 'oci:dbname=' . $this->conf['db_host'] . '/' . $this->conf['db_name'];
+
         }
 
         try {
-            $this->pdo = new PDO($dsn, $config['mysql_database_config']['db_user'], $config['mysql_database_config']['db_pass']);
-            $this->pdo->exec("SET NAMES '" . $config['mysql_database_config']['db_charset'] . "' COLLATE '" . $config['mysql_database_config']['db_collation'] . "'");
-            $this->pdo->exec("SET CHARACTER SET '" . $config['mysql_database_config']['db_charset'] . "'");
+
+            $this->pdo = new PDO($dsn, $this->conf['db_user'], $this->conf['db_pass']);
+            $this->pdo->exec("SET NAMES '" . $this->conf['db_charset'] . "' COLLATE '" . $this->conf['db_collation'] . "'");
+            $this->pdo->exec("SET CHARACTER SET '" . $this->conf['db_charset'] . "'");
             $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_OBJ);
+
         } catch (PDOException $e) {
-            die('Speicified Database Cannot Be Connected With PDO. ' . $e->getMessage());
+            die('Specified database connection couldn\'t be started with PDO. ' . $e->getMessage());
         }
         return $this->pdo;
     }
+
+    /**
+     * @param $table
+     * @return $this
+     */
 
     public function table( $table ): DbBuilder
     {
@@ -92,12 +119,23 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @param $fields
+     * @return $this
+     */
+
     public function select($fields): DbBuilder
     {
         $select = is_array($fields) ? implode(', ',$fields) : $fields;
         $this->optimizeSelect($select);
         return $this;
     }
+
+    /**
+     * @param $field
+     * @param null $name
+     * @return $this
+     */
 
     public function max($field, $name = null): DbBuilder
     {
@@ -106,12 +144,24 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @param $field
+     * @param null $name
+     * @return $this
+     */
+
     public function min($field, $name = null): DbBuilder
     {
         $column = 'MIN(' . $field . ')' . (!is_null($name) ? ' AS ' . $name : '');
         $this->optimizeSelect($column);
         return $this;
     }
+
+    /**
+     * @param $field
+     * @param null $name
+     * @return $this
+     */
 
     public function sum($field, $name = null): DbBuilder
     {
@@ -120,6 +170,12 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @param $field
+     * @param null $name
+     * @return $this
+     */
+
     public function count($field, $name = null): DbBuilder
     {
         $column = 'COUNT(' . $field . ')' . (!is_null($name) ? ' AS ' . $name : '');
@@ -127,12 +183,27 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @param $field
+     * @param null $name
+     * @return $this
+     */
+
     public function avg($field, $name = null): DbBuilder
     {
         $column = 'AVG(' . $field . ')' . (!is_null($name) ? ' AS ' . $name : '');
         $this->optimizeSelect($column);
         return $this;
     }
+
+    /**
+     * @param $table
+     * @param null $field1
+     * @param null $operator
+     * @param null $field2
+     * @param string $type
+     * @return $this
+     */
 
     public function join($table, $field1 = null, $operator = null, $field2 = null, $type = ''): DbBuilder
     {
@@ -152,35 +223,92 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @param $table
+     * @param $field1
+     * @param string $operator
+     * @param string $field2
+     * @return $this
+     */
+
     public function innerJoin($table, $field1, $operator = '', $field2 = ''): DbBuilder
     {
         return $this->join($table, $field1, $operator, $field2, 'INNER ');
     }
+
+    /**
+     * @param $table
+     * @param $field1
+     * @param string $operator
+     * @param string $field2
+     * @return $this
+     */
 
     public function leftJoin($table, $field1, $operator = '', $field2 = ''): DbBuilder
     {
         return $this->join($table, $field1, $operator, $field2, 'LEFT ');
     }
 
+    /**
+     * @param $table
+     * @param $field1
+     * @param string $operator
+     * @param string $field2
+     * @return $this
+     */
+
     public function rightJoin($table, $field1, $operator = '', $field2 = ''): DbBuilder
     {
         return $this->join($table, $field1, $operator, $field2, 'RIGHT ');
     }
+
+    /**
+     * @param $table
+     * @param $field1
+     * @param string $operator
+     * @param string $field2
+     * @return $this
+     */
 
     public function fullOuterJoin($table, $field1, $operator = '', $field2 = ''): DbBuilder
     {
         return $this->join($table, $field1, $operator, $field2, 'FULL OUTER ');
     }
 
+    /**
+     * @param $table
+     * @param $field1
+     * @param string $operator
+     * @param string $field2
+     * @return $this
+     */
+
     public function leftOuterJoin($table, $field1, $operator = '', $field2 = ''): DbBuilder
     {
         return $this->join($table, $field1, $operator, $field2, 'LEFT OUTER ');
     }
 
+    /**
+     * @param $table
+     * @param $field1
+     * @param string $operator
+     * @param string $field2
+     * @return $this
+     */
+
     public function rightOuterJoin($table, $field1, $operator = '', $field2 = ''): DbBuilder
     {
         return $this->join($table, $field1, $operator, $field2, 'RIGHT OUTER ');
     }
+
+    /**
+     * @param $where
+     * @param null $operator
+     * @param null $val
+     * @param string $type
+     * @param string $andOr
+     * @return $this
+     */
 
     public function where($where, $operator = null, $val = null, $type = '', $andOr = 'AND'): DbBuilder
     {
@@ -223,20 +351,47 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @param $where
+     * @param null $operator
+     * @param null $val
+     * @return $this
+     */
+
     public function orWhere($where, $operator = null, $val = null): DbBuilder
     {
         return $this->where($where, $operator, $val, '', 'OR');
     }
+
+    /**
+     * @param $where
+     * @param null $operator
+     * @param null $val
+     * @return $this
+     */
 
     public function notWhere($where, $operator = null, $val = null): DbBuilder
     {
         return $this->where($where, $operator, $val, 'NOT ', 'AND');
     }
 
+    /**
+     * @param $where
+     * @param null $operator
+     * @param null $val
+     * @return $this
+     */
+
     public function orNotWhere($where, $operator = null, $val = null): DbBuilder
     {
         return $this->where($where, $operator, $val, 'NOT ', 'OR');
     }
+
+    /**
+     * @param $where
+     * @param false $not
+     * @return $this
+     */
 
     public function whereNull($where, $not = false): DbBuilder
     {
@@ -246,10 +401,20 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @param $where
+     * @return $this
+     */
+
     public function whereNotNull($where): DbBuilder
     {
         return $this->whereNull($where, true);
     }
+
+    /**
+     * @param Closure $obj
+     * @return $this
+     */
 
     public function grouped(Closure $obj): DbBuilder
     {
@@ -259,6 +424,14 @@ class DbBuilder implements DbInterface
 
         return $this;
     }
+
+    /**
+     * @param $field
+     * @param array $keys
+     * @param string $type
+     * @param string $andOr
+     * @return $this
+     */
 
     public function in($field, array $keys, $type = '', $andOr = 'AND'): DbBuilder
     {
@@ -282,20 +455,47 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @param $field
+     * @param array $keys
+     * @return $this
+     */
+
     public function notIn($field, array $keys): DbBuilder
     {
         return $this->in($field, $keys, 'NOT ', 'AND');
     }
+
+    /**
+     * @param $field
+     * @param array $keys
+     * @return $this
+     */
 
     public function orIn($field, array $keys): DbBuilder
     {
         return $this->in($field, $keys, '', 'OR');
     }
 
+    /**
+     * @param $field
+     * @param array $keys
+     * @return $this
+     */
+
     public function orNotIn($field, array $keys): DbBuilder
     {
         return $this->in($field, $keys, 'NOT ', 'OR');
     }
+
+    /**
+     * @param $field
+     * @param $value1
+     * @param $value2
+     * @param string $type
+     * @param string $andOr
+     * @return $this
+     */
 
     public function between($field, $value1, $value2, $type = '', $andOr = 'AND'): DbBuilder
     {
@@ -312,20 +512,49 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @param $field
+     * @param $value1
+     * @param $value2
+     * @return $this
+     */
+
     public function notBetween($field, $value1, $value2): DbBuilder
     {
         return $this->between($field, $value1, $value2, 'NOT ', 'AND');
     }
+
+    /**
+     * @param $field
+     * @param $value1
+     * @param $value2
+     * @return $this
+     */
 
     public function orBetween($field, $value1, $value2): DbBuilder
     {
         return $this->between($field, $value1, $value2, '', 'OR');
     }
 
+    /**
+     * @param $field
+     * @param $value1
+     * @param $value2
+     * @return $this
+     */
+
     public function orNotBetween($field, $value1, $value2): DbBuilder
     {
         return $this->between($field, $value1, $value2, 'NOT ', 'OR');
     }
+
+    /**
+     * @param $field
+     * @param $data
+     * @param string $type
+     * @param string $andOr
+     * @return $this
+     */
 
     public function like($field, $data, $type = '', $andOr = 'AND'): DbBuilder
     {
@@ -344,20 +573,44 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @param $field
+     * @param $data
+     * @return $this
+     */
+
     public function orLike($field, $data): DbBuilder
     {
         return $this->like($field, $data, '', 'OR');
     }
+
+    /**
+     * @param $field
+     * @param $data
+     * @return $this
+     */
 
     public function notLike($field, $data): DbBuilder
     {
         return $this->like($field, $data, 'NOT ', 'AND');
     }
 
+    /**
+     * @param $field
+     * @param $data
+     * @return $this
+     */
+
     public function orNotLike($field, $data): DbBuilder
     {
         return $this->like($field, $data, 'NOT ', 'OR');
     }
+
+    /**
+     * @param $limit
+     * @param null $limitEnd
+     * @return $this
+     */
 
     public function limit($limit, $limitEnd = null): DbBuilder
     {
@@ -368,12 +621,23 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @param $offset
+     * @return $this
+     */
+
     public function offset($offset): DbBuilder
     {
         $this->offset = $offset;
 
         return $this;
     }
+
+    /**
+     * @param $perPage
+     * @param $page
+     * @return $this
+     */
 
     public function pagination($perPage, $page): DbBuilder
     {
@@ -382,6 +646,12 @@ class DbBuilder implements DbInterface
 
         return $this;
     }
+
+    /**
+     * @param $orderBy
+     * @param null $orderDir
+     * @return $this
+     */
 
     public function orderBy($orderBy, $orderDir = null): DbBuilder
     {
@@ -396,12 +666,24 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @param $groupBy
+     * @return $this
+     */
+
     public function groupBy($groupBy): DbBuilder
     {
         $this->groupBy = is_array($groupBy) ? implode(', ', $groupBy) : $groupBy;
 
         return $this;
     }
+
+    /**
+     * @param $field
+     * @param null $operator
+     * @param null $val
+     * @return $this
+     */
 
     public function having($field, $operator = null, $val = null): DbBuilder
     {
@@ -423,15 +705,27 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @return int
+     */
+
     public function numRows(): int
     {
         return $this->numRows;
     }
 
+    /**
+     * @return null
+     */
+
     public function insertId()
     {
         return $this->insertId;
     }
+
+    /**
+     *
+     */
 
     public function error()
     {
@@ -449,12 +743,24 @@ class DbBuilder implements DbInterface
         throw new PDOException($this->error . '. (' . $this->query . ')');
     }
 
+    /**
+     * @param null $type
+     * @param null $argument
+     * @return $this|array|false|int|mixed|string
+     */
+
     public function get($type = null, $argument = null)
     {
         $this->limit = 1;
         $query = $this->getAll(true);
         return $type === true ? $query : $this->query($query, false, $type, $argument);
     }
+
+    /**
+     * @param null $type
+     * @param null $argument
+     * @return $this|array|false|int|mixed|string
+     */
 
     public function getAll($type = null, $argument = null)
     {
@@ -491,6 +797,12 @@ class DbBuilder implements DbInterface
         return $type === true ? $query : $this->query($query, true, $type, $argument);
     }
 
+    /**
+     * @param array $data
+     * @param false $type
+     * @return false|string|null
+     */
+
     public function insert(array $data, $type = false)
     {
         $query = 'INSERT INTO ' . $this->from;
@@ -522,6 +834,12 @@ class DbBuilder implements DbInterface
         return false;
     }
 
+    /**
+     * @param array $data
+     * @param false $type
+     * @return $this|array|false|int|mixed|string
+     */
+
     public function update(array $data, $type = false)
     {
         $query = 'UPDATE ' . $this->from . ' SET ';
@@ -547,6 +865,11 @@ class DbBuilder implements DbInterface
         return $type === true ? $query : $this->query($query, false);
     }
 
+    /**
+     * @param false $type
+     * @return $this|array|false|int|mixed|string
+     */
+
     public function delete($type = false)
     {
         $query = 'DELETE FROM ' . $this->from;
@@ -570,30 +893,54 @@ class DbBuilder implements DbInterface
         return $type === true ? $query : $this->query($query, false);
     }
 
+    /**
+     * @return $this|array|false|int|mixed|string
+     */
+
     public function analyze()
     {
         return $this->query('ANALYZE TABLE ' . $this->from, false);
     }
+
+    /**
+     * @return $this|array|false|int|mixed|string
+     */
 
     public function check()
     {
         return $this->query('CHECK TABLE ' . $this->from, false);
     }
 
+    /**
+     * @return $this|array|false|int|mixed|string
+     */
+
     public function checksum()
     {
         return $this->query('CHECKSUM TABLE ' . $this->from, false);
     }
+
+    /**
+     * @return $this|array|false|int|mixed|string
+     */
 
     public function optimize()
     {
         return $this->query('OPTIMIZE TABLE ' . $this->from, false);
     }
 
+    /**
+     * @return $this|array|false|int|mixed|string
+     */
+
     public function repair()
     {
         return $this->query('REPAIR TABLE ' . $this->from, false);
     }
+
+    /**
+     * @return bool
+     */
 
     public function transaction(): bool
     {
@@ -605,6 +952,10 @@ class DbBuilder implements DbInterface
         return $this->transactionCount >= 0;
     }
 
+    /**
+     * @return bool
+     */
+
     public function commit(): bool
     {
         if (!--$this->transactionCount) {
@@ -613,6 +964,10 @@ class DbBuilder implements DbInterface
 
         return $this->transactionCount >= 0;
     }
+
+    /**
+     * @return bool
+     */
 
     public function rollBack(): bool
     {
@@ -623,6 +978,10 @@ class DbBuilder implements DbInterface
 
         return $this->pdo->rollBack();
     }
+
+    /**
+     * @return false|int|mixed|null
+     */
 
     public function exec()
     {
@@ -638,6 +997,13 @@ class DbBuilder implements DbInterface
 
         return $query;
     }
+
+    /**
+     * @param null $type
+     * @param null $argument
+     * @param false $all
+     * @return array|mixed|null
+     */
 
     public function fetch($type = null, $argument = null, $all = false)
     {
@@ -663,10 +1029,24 @@ class DbBuilder implements DbInterface
         return $result;
     }
 
+    /**
+     * @param null $type
+     * @param null $argument
+     * @return array|mixed|null
+     */
+
     public function fetchAll($type = null, $argument = null)
     {
         return $this->fetch($type, $argument, true);
     }
+
+    /**
+     * @param $query
+     * @param bool $all
+     * @param null $type
+     * @param null $argument
+     * @return $this|array|false|int|mixed|string
+     */
 
     public function query($query, $all = true, $type = null, $argument = null)
     {
@@ -739,12 +1119,22 @@ class DbBuilder implements DbInterface
         return $this->result;
     }
 
+    /**
+     * @param $data
+     * @return false|float|int|string
+     */
+
     public function escape($data)
     {
         return $data === null ? 'NULL' : (
         is_int($data) || is_float($data) ? $data : $this->pdo->quote($data)
         );
     }
+
+    /**
+     * @param $time
+     * @return $this
+     */
 
     public function cache($time): DbBuilder
     {
@@ -753,20 +1143,36 @@ class DbBuilder implements DbInterface
         return $this;
     }
 
+    /**
+     * @return int
+     */
+
     public function queryCount(): int
     {
         return $this->queryCount;
     }
+
+    /**
+     * @return null
+     */
 
     public function getQuery()
     {
         return $this->query;
     }
 
+    /**
+     *
+     */
+
     public function __destruct()
     {
         $this->pdo = null;
     }
+
+    /**
+     *
+     */
 
     protected function reset()
     {
@@ -788,10 +1194,19 @@ class DbBuilder implements DbInterface
         $this->transactionCount = 0;
     }
 
+    /**
+     * @param $type
+     * @return int
+     */
+
     protected function getFetchType($type): int
     {
         return $type === 'class' ? PDO::FETCH_CLASS : ($type === 'array' ? PDO::FETCH_ASSOC : PDO::FETCH_OBJ);
     }
+
+    /**
+     * @param $fields
+     */
 
     private function optimizeSelect($fields)
     {
